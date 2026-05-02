@@ -13,7 +13,7 @@ import re
 # ═══════════════════════════════════════════════════════════════
 # 🤖 BOT TOKENI - BURAYA KENDİ BOT TOKENİNİZİ YAZIN
 # ═══════════════════════════════════════════════════════════════
-BOT_TOKEN = "BOT_TOKEN_HERE"  # <-- BOT TOKENINIZI BURAYA YAZIN (DEĞİŞTİR)
+BOT_TOKEN = os.getenv("BOT_TOKEN")  # <-- BOT TOKENINIZI BURAYA YAZIN (DEĞİŞTİR)
 
 # Spotify "Listening" - AnonymousDC şarkıları (görünüm için)
 ANONYMOUSDC_SPOTIFY_SONGS = [
