@@ -15,7 +15,7 @@ async def on_ready():
 async def on_member_join(member):
     channel = member.guild.system_channel
     if channel is None:
-        channel = discord.utils.get(member.guild.text_channels, name="genel")
+        channel = discord.utils.get(member.guild.text_channels, name="gelmek-kaderiniz")
     
     if channel:
         member_count = member.guild.member_count
@@ -25,7 +25,7 @@ async def on_member_join(member):
 async def on_member_remove(member):
     channel = member.guild.system_channel
     if channel is None:
-        channel = discord.utils.get(member.guild.text_channels, name="genel")
+        channel = discord.utils.get(member.guild.text_channels, name="gelmek-kaderiniz")
     
     if channel:
         member_count = member.guild.member_count
